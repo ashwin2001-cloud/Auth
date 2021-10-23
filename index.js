@@ -1,6 +1,6 @@
 const express= require('express');
 const app= express();
-const port= 3000;
+const port= process.env.POST || 3000;
 
 const {db, mongoURL}= require('./config/mongoose');
 const Users= require('./models/users');
@@ -8,6 +8,9 @@ const path= require('path');
 
 const session= require('express-session');
 const MongoStore= require('connect-mongo');
+
+const passport= require('passport');
+const passportLocal= require('./config/passport-local');
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -18,49 +21,45 @@ app.use(session({
     name: "Session_name",
     secret: "Some secret",
     saveUninitialized: false,
-    store: MongoStore.create({mongoUrl: mongoURL})
+    resave: false,
+    store: MongoStore.create({mongoUrl:mongoURL})
 }));
 
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.get('/', (req, res)=>{
-    if(req.session.user){
+    console.log(req.sessionID);
+    if(req.isAuthenticated()){
         res.render('profile', {
-            email: req.session.user
+            email: req.user.email
         });
     }
     else res.redirect('/login');
 })
 
 app.get('/login', (req, res)=>{
-    if(req.session.user){
+    if(req.isAuthenticated()){
         res.redirect('/');
     }
     else res.render('login');
 })
 
 app.get('/signup', (req, res)=>{
-    if(req.session.user){
+    if(req.isAuthenticated()){
         res.redirect('/');
     }
     else res.render('signup');
 });
 
-app.post('/createSession', (req, res)=>{
-    console.log(req.body);
-    Users.findOne({email: req.body.email}, (err, user)=>{
-        if(err){
-            console.log(err); return;
-        }
-
-        if(user && user.password==req.body.password){
-            req.session.user= req.body.email;
-            res.redirect('/');
-        }
-        else res.redirect('/login');
-    })
+app.post('/createSession', passport.authenticate('local', { failureRedirect: '/login'}), (req, res)=>{
+    res.redirect('/');
 })
 
 app.get('/logout', (req, res)=>{
-    res.clearCookie("Session_name");
+    // req.logout();
+    res.clearCookie('Session_name');
+    console.log('***', req.sessionID, '***');
     res.redirect('/');
 })
 
@@ -68,11 +67,8 @@ app.post('/createAccount', (req, res)=>{
     console.log(req.body);
     if(req.body.password==req.body.password_reenter){
         Users.create(req.body);
-        req.session.user= req.body.email;
-        console.log(req.session.user);
-        res.redirect('/');
     }
-    else res.redirect('/');
+    res.redirect('/login');
 })
 
 
